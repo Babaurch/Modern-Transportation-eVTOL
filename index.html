@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>eVTOL Dispatch Controller</title>
+  <style>
+    table {
+      border-collapse: collapse;
+      width: 100%;
+    }
+
+    th, td {
+      border: 1px solid black;
+      padding: 8px;
+      text-align: left;
+    }
+
+    th {
+      background-color: #f2f2f2;
+    }
+  </style>
+</head>
+<body>
+  <h1>eVTOL Dispatch Controller</h1>
+  <h2>Register eVTOL</h2>
+  <form>
+    <label>Serial Number:</label>
+    <input type="text" id="serialNumber" required>
+    <br><br>
+    <label>Model:</label>
+    <select id="model" required>
+      <option value="Lightweight">Lightweight</option>
+      <option value="Middleweight">Middleweight</option>
+      <option value="Cruiserweight">Cruiserweight</option>
+      <option value="Heavyweight">Heavyweight</option>
+    </select>
+    <br><br>
+    <label>Weight Limit:</label>
+    <input type="number" id="weightLimit" required>
+    <br><br>
+    <label>Battery Capacity:</label>
+    <input type="number" id="batteryCapacity" required>
+    <br><br>
+    <button type="button" onclick="registerEvtol()">Register</button>
+  </form>
+  <br>
+  <h2>Load eVTOL with Medication</h2>
+  <form>
+    <label>eVTOL Serial Number:</label>
+    <input type="text" id="evtolSerialNumber" required>
+    <br><br>
+    <label>Medication Name:</label>
+    <input type="text" id="medicationName" required>
+    <br><br>
+    <label>Medication Weight:</label>
+    <input type="number" id="medicationWeight" required>
+    <br><br>
+    <label>Medication Code:</label>
+    <input type="text" id="medicationCode" required>
+    <br><br>
+    <button type="button" onclick="loadEvtol()">Load</button>
+  </form>
+  <br>
+  <h2>Check Loaded Medications for a given eVTOL</h2>
+  <form>
+    <label>eVTOL Serial Number:</label>
+    <input type="text" id="evtolSerialNumber2" required>
+    <br><br>
+    <button type="button" onclick="checkLoadedMedications()">Check</button>
+  </form>
+  <br>
+  <h2>Check Available eVTOLs for Loading</h2>
+  <button type="button" onclick="checkAvailableEvtols()">Check</button>
+  <br><br>
+  <h2>Check e
+
+    <h2>Battery Level History</h2>
+    <table id="historyTable">
+      <tr>
+        <th>Date</th>
+        <th>Serial Number</th>
+        <th>Battery Level</th>
+      </tr>
+    </table>
+    <br>
+    <h2>Events Log</h2>
+    <table id="eventsTable">
+      <tr>
+        <th>Date</th>
+        <th>Action</th>
+        <th>Details</th>
+      </tr>
+    </table>
+    <script>
+      async function registerEvtol() {
+        const serialNumber = document.getElementById("serialNumber").value;
+        const model = document.getElementById("model").value;
+        const weightLimit = document.getElementById("weightLimit").value;
+        const batteryCapacity = document.getElementById("batteryCapacity").value;
+  
+        const response = await fetch("http://localhost:3000/evtols", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({
+            serialNumber,
+            model,
+            weightLimit,
+            batteryCapacity
+          })
+        });
+  
+        if (response.ok) {
+          alert("eVTOL registered successfully");
+        } else {
+          alert("Failed to register eVTOL");
+        }
+      }
+  
+      async function loadEvtol() {
+        const evtolSerialNumber = document.getElementById("evtolSerialNumber").value;
+        const medicationName = document.getElementById("medicationName").value;
+        const medicationWeight = document.getElementById("medicationWeight").value;
+        const medicationCode = document.getElementById("medicationCode").value;
+  
+        const response = await fetch(`http://localhost:3000/evtols/${evtolSerialNumber}/medications`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({
+            medicationName,
+            medicationWeight,
+            medicationCode
+          })
+        });
+  
+        if (response.ok) {
+          alert("Medication loaded successfully");
+        } else {
+          alert("Failed to load medication");
+        }
+      }
+  
+      async function checkLoadedMedications() {
+        const evtolSerialNumber = document.getElementById("evtolSerialNumber2").value;
+  
+        const response = await fetch(`http://localhost:3000/evtols/${evtolSerialNumber}/medications`);
+        const medications = await response.json();
+  
+        let result = "";
+        for (const medication of medications) {
+          result += `Name: ${medication.medicationName} Weight: ${medication.medicationWeight} Code: ${medication.medicationCode}\n`;
+        }
+  
+        alert(result || "No medications found");
+      }
+  
+      async function checkAvailableEvtols() {
+        const response = await fetch("http://localhost:3000/evtols?status=AVAILABLE");
+  

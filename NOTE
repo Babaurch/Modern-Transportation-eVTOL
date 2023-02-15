@@ -1,0 +1,213 @@
+To develop the REST API for the dispatch controller, the following endpoint functions can be created:
+
+Register an eVTOL:
+
+Endpoint: POST /evtol
+Request Body: serial number, model, weight limit, battery capacity
+Response: Success or Failure message
+Load an eVTOL with medication items:
+
+Endpoint: PUT /evtol/{serial number}/load
+Request Body: medication name, weight, code, image
+Response: Success or Failure message
+Check loaded medication items for a given eVTOL:
+
+Endpoint: GET /evtol/{serial number}/medications
+Response: List of medications loaded on the given eVTOL
+Check available eVTOL for loading:
+
+Endpoint: GET /evtol/available
+Response: List of available eVTOLs with their serial numbers and battery levels
+Check eVTOL battery level for a given eVTOL:
+
+Endpoint: GET /evtol/{serial number}/battery
+Response: Battery level of the given eVTOL in percentage.
+
+
+Here's an example implementation of the API using Express in Node.js:
+
+const express = require("express");
+const app = express();
+const port = 3000;
+
+// Array to store eVTOLs
+let evtols = [];
+
+// Function to check if an eVTOL is available for loading
+const isAvailable = (evtol) => {
+  return evtol.state === "IDLE";
+};
+
+// Endpoint to register an eVTOL
+app.post("/evtol", (req, res) => {
+  let evtol = {
+    serialNumber: req.body.serialNumber,
+    model: req.body.model,
+    weightLimit: req.body.weightLimit,
+    batteryCapacity: req.body.batteryCapacity,
+    state: "IDLE",
+    medications: [],
+  };
+  evtols.push(evtol);
+  res.status(200).send("eVTOL registered successfully");
+});
+
+// Endpoint to load an eVTOL with medication items
+app.put("/evtol/:serialNumber/load", (req, res) => {
+  let evtol = evtols.find((evtol) => evtol.serialNumber === req.params.serialNumber);
+  if (!evtol) {
+    res.status(400).send("eVTOL not found");
+    return;
+  }
+  if (!isAvailable(evtol)) {
+    res.status(400).send("eVTOL not available for loading");
+    return;
+  }
+  let medication = {
+    name: req.body.name,
+    weight: req.body.weight,
+    code: req.body.code,
+    image: req.body.image,
+  };
+  evtol.medications.push(medication);
+  evtol.state = "LOADED";
+  res.status(200).send("Medication loaded successfully");
+});
+
+// Endpoint to check loaded medication items for a given eVTOL
+app.get("/evtol/:serialNumber/medications", (req, res) => {
+  let evtol = evtols.find((evtol) => evtol.serialNumber === req.params.serialNumber);
+  if (!evtol) {
+    res.status(400).send("eVTOL not found");
+    return;
+  }
+  res.status(200).json(evtol.medications);
+});
+
+// Endpoint to check available eVTOL for loading
+app.get("/evtol/available", (req, res) => {
+  let availableEvtols = evtols.filter(isAvailable);
+  res.status(200).json(availableEvtols);
+});
+
+// Endpoint to check eVTOL battery level for a given eVTOL
+app.get("/evtol/:serialNumber/battery", (req, res) => {
+  let evtol = evtols.find((evtol) => evtol.serialNumber === req.params.serialNumber);
+  if (!evtol) {
+    res.status(400).send("eVTOL not found");
+    return;
+  }
+  res.status(200).send(`Battery level: ${evtol.batteryCapacity}%`);
+});
+
+app.listen(port, () => {
+console.log(API is running on port ${port});
+});
+
+
+This code uses the Express library to define and handle different endpoints for the API. The `evtols` array is used to store the registered eVTOLs and their information. The `isAvailable` function checks if an eVTOL is available for loading by checking its state.
+
+The API has endpoints for registering an eVTOL, loading an eVTOL with medication items, checking loaded medication items for a given eVTOL, checking available eVTOLs for loading, and checking the battery level for a given eVTOL. Each endpoint uses the appropriate HTTP method (`POST`, `PUT`, `GET`) and utilizes the request and response objects from Express to handle the data sent by the client and respond with the relevant information.
+
+
+    - Prevent the eVTOL from being loaded with more weight than it can carry;
+    - Prevent the eVTOL from being in a LOADING state if the battery level is **below 25%**; 
+    - Introduce a periodic task to check the eVTOL’s battery levels and create a history/audit event log for this.
+
+
+const express = require('express');
+const app = express();
+const port = 3000;
+
+let evtols = [];
+let batteryAuditLog = [];
+
+const isAvailable = (evtol) => {
+  return evtol.state === 'IDLE' || evtol.state === 'RETURNING';
+};
+
+const checkBatteryLevel = (evtol) => {
+  if (evtol.batteryCapacity < 25) {
+    evtol.state = 'IDLE';
+    batteryAuditLog.push(`${evtol.serialNumber} battery level below 25%, eVTOL is IDLE`);
+  }
+};
+
+app.post('/evtol', (req, res) => {
+  const evtol = req.body;
+  evtols.push(evtol);
+  res.send(`eVTOL with serial number ${evtol.serialNumber} registered`);
+});
+
+app.put('/evtol/load/:serialNumber', (req, res) => {
+  const serialNumber = req.params.serialNumber;
+  const medications = req.body;
+  let evtol = evtols.find(e => e.serialNumber === serialNumber);
+
+  if (!evtol) {
+    return res.status(400).send(`eVTOL with serial number ${serialNumber} not found`);
+  }
+
+  if (!isAvailable(evtol)) {
+    return res.status(400).send(`eVTOL with serial number ${serialNumber} is not available for loading`);
+  }
+
+  if (evtol.batteryCapacity < 25) {
+    return res.status(400).send(`eVTOL with serial number ${serialNumber} has battery level below 25%, cannot load`);
+  }
+
+  let weight = 0;
+  for (let medication of medications) {
+    weight += medication.weight;
+  }
+
+  if (weight > evtol.weightLimit) {
+    return res.status(400).send(`eVTOL with serial number ${serialNumber} cannot carry the weight`);
+  }
+
+  evtol.state = 'LOADING';
+  evtol.medications = medications;
+  res.send(`eVTOL with serial number ${serialNumber} loaded with medications`);
+});
+
+app.get('/evtol/:serialNumber/medications', (req, res) => {
+  const serialNumber = req.params.serialNumber;
+  let evtol = evtols.find(e => e.serialNumber === serialNumber);
+
+  if (!evtol) {
+    return res.status(400).send(`eVTOL with serial number ${serialNumber} not found`);
+  }
+
+  res.send(evtol.medications);
+});
+
+app.get('/evtols/available', (req, res) => {
+  let availableEvtols = evtols.filter(isAvailable);
+  res.send(availableEvtols);
+});
+
+app.get('/evtol/:serialNumber/battery', (req, res) => {
+  const serialNumber = req.params.serialNumber;
+  let evtol = evtols.find(e => e.serialNumber === serialNumber);
+
+if (!evtol) {
+return res.status(400).send(eVTOL with serial number ${serialNumber} not found);
+}
+
+res.send({ batteryCapacity: evtol.batteryCapacity });
+});
+
+setInterval(() => {
+for (let evtol of evtols) {
+checkBatteryLevel(evtol);
+}
+}, 5000);
+
+app.listen(port, () => {
+console.log(eVTOL dispatch controller API listening at http://localhost:${port});
+});
+
+
+In this code, we have implemented the validation checks for loading an eVTOL with medication, checking the loaded medications for a given eVTOL, checking available eVTOLs for loading, and checking the battery level for a given eVTOL.
+
+We also have a periodic task (setInterval) that runs every 5 seconds to check the battery level of all eVTOLs and creates a history/audit event log if the battery level falls below 25%. The log is stored in the `batteryAuditLog` array.
